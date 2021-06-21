@@ -21,3 +21,20 @@ impl EfiStatus {
         0x8000_0000_0000_0000 & self.0 > 0
     }
 }
+
+#[repr(C)]
+pub struct EfiTableHeader {
+    pub signature: u64,
+    pub revision: u32,
+    pub header_size: u32,
+    pub crc32: u32,
+    _reserved: u32,
+}
+
+impl EfiTableHeader {
+    pub fn parse_revision(&self) -> (u16, u16) {
+        let major = ((self.revision & 0xFFFF0000) >> 16) as u16;
+        let minor = (self.revision & 0xFFFF) as u16;
+        (major, minor)
+    }
+}
