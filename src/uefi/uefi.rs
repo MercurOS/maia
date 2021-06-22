@@ -12,8 +12,12 @@ impl Application {
     pub unsafe fn from(
         image_handle: super::EfiHandle,
         system_table: *mut super::EfiSystemTable,
-    ) -> Self {
-        Self { image_handle, system_table }
+    ) -> Option<Self> {
+        if (*system_table).hdr.signature == super::api::system::SYSTEM_TABLE_SIGNATURE {
+            Some(Self { image_handle, system_table })
+        } else {
+            None
+        }
     }
 }
 

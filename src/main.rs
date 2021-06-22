@@ -8,6 +8,7 @@ use core::panic::PanicInfo;
 use core::ffi::c_void;
 
 pub mod assembly;
+mod boot;
 mod uefi;
 
 use uefi::EfiStatus;
@@ -25,16 +26,14 @@ pub extern "efiapi" fn efi_main(
     image_handle: uefi::EfiHandle,
     system_table: *mut uefi::EfiSystemTable,
 ) -> EfiStatus {
-    let mut uefi = unsafe {
+    let uefi = unsafe {
         uefi::Application::from(image_handle, system_table)
     };
 
-    uefi::Console::write_string(
-        &mut uefi,
-        "/// MercurOS Maia Bootloader ///\r\n"
-    );
-
-    EfiStatus::load_error()
+    match uefi {
+        Some(uefi) => boot::boot(uefi),
+        None => EfiStatus::load_error(),
+    }
 }
 
 #[panic_handler]
