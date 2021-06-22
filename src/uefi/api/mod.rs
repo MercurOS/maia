@@ -1,7 +1,7 @@
 // External interface definitions for the UEFI API
 
 pub mod protocols;
-pub mod services;
+pub mod boot_services;
 pub mod system;
 
 #[repr(C)]

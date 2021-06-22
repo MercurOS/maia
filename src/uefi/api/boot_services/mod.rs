@@ -1,30 +1,19 @@
-use core::ffi::c_void;
+pub mod memory;
 
-use super::super::{
-    EfiStatus,
-    EfiTableHeader,
-    EfiPhyiscalAddress,
-    EfiVirtualAddress,
-};
+use core::ffi::c_void;
 
 #[repr(C)]
 pub struct EfiBootServices {
-    pub hdr: EfiTableHeader,
+    pub hdr: super::EfiTableHeader,
 
     // Task Priority Services
     _raise_tpl: *const c_void,
     _restore_tpl: *const c_void,
 
     // Memory Services
-    _allocate_pages: *const c_void,
+    pub allocate_pages: memory::EfiAllocatePages,
     _free_pages: *const c_void,
-    pub get_memory_map: extern "efiapi" fn(
-        memory_map_size: *mut usize,
-        memory_map: *mut EfiMemoryDescriptor,
-        map_key: *mut usize,
-        descriptor_size: *mut usize,
-        descriptor_version: *mut u32,
-    ) -> EfiStatus,
+    pub get_memory_map: memory::EfiGetMemoryMap,
     _allocate_pool: *const c_void,
     _free_pool: *const c_void,
 
@@ -82,13 +71,4 @@ pub struct EfiBootServices {
     _copy_mem: *const c_void,
     _set_mem: *const c_void,
     _create_event_ex: *const c_void,
-}
-
-#[repr(C)]
-pub struct EfiMemoryDescriptor {
-    pub r#type: u32,
-    pub physical_start: EfiPhyiscalAddress,
-    pub virtual_start: EfiVirtualAddress,
-    pub number_of_pages: u64,
-    pub attribute: u64,
 }
