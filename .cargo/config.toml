@@ -1,6 +1,5 @@
 [target.riscv64gc-unknown-none-elf]
-rustflags = ["-C", "link-arg=-Tsrc/arch/riscv/riscv64-efi.ld"]
-runner = "qemu-system-riscv64 -machine virt -cpu rv64 -smp 4 -m 128M -drive if=none,format=raw,file=hdd.dsk,id=foo -device virtio-blk-device,scsi=off,drive=foo -nographic -serial mon:stdio -bios none -device virtio-rng-device -device virtio-gpu-device -device virtio-net-device -device virtio-tablet-device -device virtio-keyboard-device -kernel "
+rustflags = ["-C", "link-arg=-Tsrc/arch/riscv/riscv64-efi.ld", "-Clink-arg=-Map=/tmp/maia.map"]
 
 [build]
 target = "riscv64gc-unknown-none-elf"
