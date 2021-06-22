@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+#![feature(abi_efiapi)]
 #![feature(global_asm)]
 
 use core::panic::PanicInfo;
@@ -9,11 +10,7 @@ use core::ffi::c_void;
 pub mod assembly;
 mod uefi;
 
-use uefi::{
-    EfiHandle,
-    EfiStatus,
-    EfiSystemTable,
-};
+use uefi::EfiStatus;
 
 #[no_mangle]
 pub extern "C" fn relocate(
@@ -24,11 +21,16 @@ pub extern "C" fn relocate(
 }
 
 #[no_mangle]
-pub extern "C" fn efi_main(
-    _image_handle: EfiHandle,
-    system_table: &'static mut EfiSystemTable,
+pub extern "efiapi" fn efi_main(
+    image_handle: uefi::EfiHandle,
+    system_table: *mut uefi::EfiSystemTable,
 ) -> EfiStatus {
-    system_table.console_out.write_string(
+    let mut uefi = unsafe {
+        uefi::Application::from(image_handle, system_table)
+    };
+
+    uefi::Console::write_string(
+        &mut uefi,
         "/// MercurOS Maia Bootloader ///\r\n"
     );
 

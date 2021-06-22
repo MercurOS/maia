@@ -1,7 +1,14 @@
-pub mod types;
-pub mod protocols;
+mod api;
+mod uefi;
+mod console;
 
-mod systemtable;
+use uefi::UEFI;
 
-pub use types::{EfiHandle, EfiStatus};
-pub use systemtable::EfiSystemTable;
+pub use api::{
+    EfiHandle,
+    EfiStatus,
+    system::EfiSystemTable,
+};
+
+pub use uefi::Application;
+pub use console::Console;
