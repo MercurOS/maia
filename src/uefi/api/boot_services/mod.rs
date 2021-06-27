@@ -14,7 +14,7 @@ pub struct EfiBootServices {
     pub allocate_pages: memory::EfiAllocatePages,
     _free_pages: *const c_void,
     pub get_memory_map: memory::EfiGetMemoryMap,
-    _allocate_pool: *const c_void,
+    pub allocate_pool: memory::EfiAllocatePool,
     _free_pool: *const c_void,
 
     // Event & Timer Services

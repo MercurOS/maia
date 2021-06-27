@@ -1,4 +1,9 @@
 pub trait Console: super::UEFI {
+    fn clear_screen(&mut self) {
+        let console_out = unsafe { &mut *(self.borrow_system().console_out) };
+        (console_out.clear_screen)(console_out);
+    }
+
     fn write_string(&mut self, s: &str) {
         let console_out = unsafe { &mut *(self.borrow_system().console_out) };
 
