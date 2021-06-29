@@ -1,5 +1,8 @@
 [target.riscv64gc-unknown-none-elf]
-rustflags = ["-C", "link-arg=-Tsrc/arch/riscv/riscv64-efi.ld", "-Clink-arg=-Map=/tmp/maia.map"]
+rustflags = [
+    "-Clink-arg=-Tsrc/arch/riscv/riscv64-efi.ld",
+    "-Clink-arg=-Map=/tmp/maia.map",
+]
 
 [build]
 target = "riscv64gc-unknown-none-elf"

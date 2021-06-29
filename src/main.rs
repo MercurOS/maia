@@ -8,6 +8,8 @@ use core::panic::PanicInfo;
 use core::ffi::c_void;
 
 pub mod assembly;
+pub mod kernel;
+
 mod boot;
 mod uefi;
 

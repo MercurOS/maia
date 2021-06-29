@@ -2,6 +2,10 @@
 name = "mercuros-maia"
 version = "0.0.1"
 authors = ["Henry Carlson <henry.carlson@gmail.com>"]
+license = "MIT/Apache-2.0"
 edition = "2018"
 
 [dependencies]
+
+[build-dependencies]
+llvm-tools = "0.1"
