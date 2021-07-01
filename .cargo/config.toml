@@ -1,7 +1,12 @@
 [target.riscv64gc-unknown-none-elf]
 rustflags = [
+    "-Crelocation-model=pic",
+    "-Clink-arg=-znocombreloc",
     "-Clink-arg=-Tsrc/arch/riscv/riscv64-efi.ld",
+    "-Clink-arg=-shared",
+    "-Clink-arg=-Bsymbolic",
     "-Clink-arg=-Map=/tmp/maia.map",
+    "-Clink-arg=-s",
 ]
 
 [build]

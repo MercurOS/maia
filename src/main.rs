@@ -2,6 +2,7 @@
 #![no_main]
 
 #![feature(abi_efiapi)]
+#![feature(asm)]
 #![feature(global_asm)]
 
 use core::panic::PanicInfo;
@@ -11,6 +12,8 @@ pub mod assembly;
 pub mod kernel;
 
 mod boot;
+mod elf;
+mod relocate;
 mod uefi;
 
 use uefi::EfiStatus;
@@ -18,9 +21,9 @@ use uefi::EfiStatus;
 #[no_mangle]
 pub extern "C" fn relocate(
     base_address: *const c_void,
-    efi_dyn: *const c_void,
+    elf_dyn: *const c_void,
 ) -> EfiStatus {
-    EfiStatus::success()
+    unsafe { relocate::relocate(base_address, elf_dyn) }
 }
 
 #[no_mangle]
@@ -32,9 +35,10 @@ pub extern "efiapi" fn efi_main(
         uefi::Application::from(image_handle, system_table)
     };
 
-    match uefi {
-        Some(uefi) => boot::boot(uefi),
-        None => EfiStatus::load_error(),
+    if let Some(uefi) = uefi {
+        boot::boot(uefi)
+    } else {
+        EfiStatus::load_error()
     }
 }
 
