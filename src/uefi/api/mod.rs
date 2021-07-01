@@ -66,6 +66,10 @@ impl EfiStatus {
         EfiStatus(EFI_ERROR | 1)
     }
 
+    pub fn out_of_resources() -> EfiStatus {
+        EfiStatus(EFI_ERROR | 9)
+    }
+
     pub fn is_ok(&self) -> bool {
         EFI_ERROR & self.0 == 0
     }

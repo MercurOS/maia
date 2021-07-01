@@ -1,4 +1,11 @@
-pub trait Console: super::UEFI {
+use super::Application;
+
+pub trait Console {
+    fn clear_screen(&mut self);
+    fn write_string(&mut self, s: &str);
+}
+
+impl Console for Application {
     fn clear_screen(&mut self) {
         let console_out = unsafe { &mut *(self.borrow_system().console_out) };
         (console_out.clear_screen)(console_out);
@@ -18,4 +25,9 @@ pub trait Console: super::UEFI {
     }
 }
 
-impl Console for super::Application {}
+impl core::fmt::Write for Application {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        super::console::Console::write_string(self, s);
+        Ok(())
+    }
+}

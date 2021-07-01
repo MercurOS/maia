@@ -1,7 +1,19 @@
-use super::UEFIError;
-use super::api::boot_services::memory;
+use super::{
+    api::{
+        boot_services::memory,
+        EfiPhyiscalAddress,
+    },
+    Application,
+    UEFIError,
+};
 
-pub trait Memory: super::UEFI {
+pub trait Memory {
+    fn allocate(&mut self, size: usize) -> Option<*mut core::ffi::c_void>;
+    fn allocate_pages(&mut self, count: usize) -> Option<&mut [u8]>;
+    fn get_memory_map(&mut self) -> Result<MemoryMap, UEFIError>;
+}
+
+impl Memory for Application {
     fn allocate(
         &mut self,
         size: usize,
@@ -19,6 +31,36 @@ pub trait Memory: super::UEFI {
 
         if status.is_ok() {
             Some(ptr as *mut core::ffi::c_void)
+        } else {
+            None
+        }
+    }
+
+    /// Attempt to allocate `count` continuous 4KiB pages.
+    fn allocate_pages(
+        &mut self,
+        count: usize,
+    ) -> Option<&mut [u8]> {
+        let boot_services = unsafe {
+            &mut *(self.borrow_system().boot_services)
+        };
+
+        let mut ptr: EfiPhyiscalAddress = 0;
+        let status = (boot_services.allocate_pages)(
+            memory::ALLOCATE_ANY_PAGES,
+            memory::EFI_LOADER_DATA,
+            count,
+            (&mut ptr) as *mut EfiPhyiscalAddress
+        );
+
+        if status.is_ok() {
+            let slice = unsafe {
+                core::slice::from_raw_parts_mut(
+                    ptr as *mut u8,
+                    4096 * count
+                )
+            };
+            Some(slice)
         } else {
             None
         }
@@ -74,6 +116,7 @@ pub trait Memory: super::UEFI {
                 (&mut descriptor_ver) as *mut u32,
             );
             if !status.is_ok() {
+                (boot_services.free_pool)(memory_map);
                 return Err(UEFIError::MemoryMapUnavailable);
             }
         }
@@ -87,8 +130,8 @@ pub trait Memory: super::UEFI {
     }
 }
 
-impl Memory for super::Application {}
-
+/// Memory safety: Dropping MemoryMap without freeing the allocated
+/// `_map_handle` will leak memory
 pub struct MemoryMap {
     pub map_key: usize,
     pub descriptor_size: usize,

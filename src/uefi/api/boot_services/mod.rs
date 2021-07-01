@@ -1,3 +1,4 @@
+pub mod image;
 pub mod memory;
 
 use core::ffi::c_void;
@@ -15,7 +16,7 @@ pub struct EfiBootServices {
     _free_pages: *const c_void,
     pub get_memory_map: memory::EfiGetMemoryMap,
     pub allocate_pool: memory::EfiAllocatePool,
-    _free_pool: *const c_void,
+    pub free_pool: memory::EfiFreePool,
 
     // Event & Timer Services
     _create_event: *const c_void,
@@ -41,7 +42,7 @@ pub struct EfiBootServices {
     _start_image: *const c_void,
     _exit: *const c_void,
     _unload_image: *const c_void,
-    _exit_boot_services: *const c_void,
+    pub exit_boot_services: image::EfiExitBootServices,
 
     // Miscellaneous Services
     _get_next_monotonic_count: *const c_void,

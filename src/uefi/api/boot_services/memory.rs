@@ -19,12 +19,6 @@ pub const ALLOCATE_ADDRESS: EfiAllocateType = 2;
 pub type EfiMemoryType = u32;
 pub const EFI_LOADER_DATA: EfiMemoryType = 2;
 
-pub type EfiAllocatePool = extern "efiapi" fn(
-    pool_type: EfiMemoryType,
-    size: usize,
-    memory: *mut *const core::ffi::c_void,
-) -> EfiStatus;
-
 pub type EfiGetMemoryMap = extern "efiapi" fn(
     memory_map_size: *mut usize,
     memory_map: *mut EfiMemoryDescriptor,
@@ -41,3 +35,13 @@ pub struct EfiMemoryDescriptor {
     pub number_of_pages: u64,
     pub attribute: u64,
 }
+
+pub type EfiAllocatePool = extern "efiapi" fn(
+    pool_type: EfiMemoryType,
+    size: usize,
+    memory: *mut *const core::ffi::c_void,
+) -> EfiStatus;
+
+pub type EfiFreePool = extern "efiapi" fn(
+    buffer: *const core::ffi::c_void,
+) -> EfiStatus;

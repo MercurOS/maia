@@ -2,7 +2,13 @@
 
 include!(concat!(env!("OUT_DIR"), "/kernel_info.rs"));
 
-static KERNEL: PageAligned<[u8; KERNEL_SIZE]> = PageAligned(KERNEL_BYTES);
+pub static KERNEL: PageAligned<[u8; KERNEL_SIZE]> = PageAligned(KERNEL_BYTES);
 
 #[repr(align(4096))]
-struct PageAligned<T>(T);
+pub struct PageAligned<T>(T);
+
+impl <T> PageAligned<T> {
+    pub fn borrow(&self) -> &T {
+        &self.0
+    }
+}

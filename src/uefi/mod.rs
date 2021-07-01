@@ -1,17 +1,17 @@
 mod api;
+mod application;
 mod error;
-mod uefi;
 mod console;
+mod image;
 mod memory;
-
-use uefi::UEFI;
 
 pub use api::{
     EfiHandle,
     EfiStatus,
     system::EfiSystemTable,
 };
+pub use application::Application;
 pub use error::UEFIError;
-pub use uefi::Application;
 pub use console::Console;
+pub use image::Image;
 pub use memory::{Memory, MemoryMap};

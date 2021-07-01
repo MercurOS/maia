@@ -36,7 +36,10 @@ pub extern "efiapi" fn efi_main(
     };
 
     if let Some(uefi) = uefi {
-        boot::boot(uefi)
+        match boot::boot(uefi) {
+            Ok(()) => EfiStatus::success(),
+            Err(error) => error.into(),
+        }
     } else {
         EfiStatus::load_error()
     }
