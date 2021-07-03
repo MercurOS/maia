@@ -1,4 +1,4 @@
-mod api;
+pub mod api;
 mod application;
 mod error;
 mod console;

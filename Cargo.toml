@@ -5,6 +5,13 @@ authors = ["Henry Carlson <henry.carlson@gmail.com>"]
 license = "MIT/Apache-2.0"
 edition = "2018"
 
+[features]
+default = []
+
+debug_kernel = []
+debug_mmap = []
+debug_all = ["debug_kernel", "debug_mmap"]
+
 [dependencies]
 
 [build-dependencies]

@@ -7,7 +7,7 @@ pub struct ProgramHeader {
     _paddr: u64,
     filesz: u64,
     memsz: u64,
-    _align: u64,
+    align: u64,
 }
 
 impl ProgramHeader {
@@ -29,6 +29,10 @@ impl ProgramHeader {
 
     pub fn get_memory_size(&self) -> usize {
         self.memsz as usize
+    }
+
+    pub fn get_alignment(&self) -> usize {
+        self.align as usize
     }
 }
 

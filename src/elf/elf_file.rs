@@ -66,7 +66,7 @@ pub struct ProgramHeaderIterator<'a> {
     next_index: usize,
 }
 
-impl <'a> ProgramHeaderIterator<'a> {
+impl<'a> ProgramHeaderIterator<'a> {
     fn new(
         buffer: &'a [u8],
         table_info: header::TableInfo,
@@ -90,7 +90,7 @@ impl <'a> ProgramHeaderIterator<'a> {
     }
 }
 
-impl <'a> core::iter::Iterator for ProgramHeaderIterator<'a> {
+impl<'a> core::iter::Iterator for ProgramHeaderIterator<'a> {
     type Item = &'a ProgramHeader;
 
     fn next(&mut self) -> Option<Self::Item> {

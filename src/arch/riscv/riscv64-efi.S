@@ -134,7 +134,7 @@ _start:
     sd ra, 16(sp)
 
     lla a0, ImageBase
-     lla a1, _DYNAMIC
+    lla a1, _DYNAMIC
     call relocate
     bnez a0, 0f
 

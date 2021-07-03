@@ -17,7 +17,11 @@ pub const ALLOCATE_MAX_ADDRESS: EfiAllocateType = 1;
 pub const ALLOCATE_ADDRESS: EfiAllocateType = 2;
 
 pub type EfiMemoryType = u32;
+pub const EFI_RESERVED_MEMORY_TYPE: EfiMemoryType = 0;
 pub const EFI_LOADER_DATA: EfiMemoryType = 2;
+pub const EFI_CONVENTIONAL_MEMORY: EfiMemoryType = 7;
+pub const EFI_UNUSABLE_MEMORY: EfiMemoryType = 8;
+pub const EFI_MEMORY_MAPPED_IO: EfiMemoryType = 11;
 
 pub type EfiGetMemoryMap = extern "efiapi" fn(
     memory_map_size: *mut usize,

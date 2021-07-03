@@ -43,6 +43,9 @@ pub fn boot(mut uefi: uefi::Application) -> Result<(), Error> {
         "MercurOS Maia Bootloader\r\n"
     );
 
+    #[cfg(feature = "debug_mmap")]
+    debug_mmap(&mut uefi)?;
+
     let (entry_point, memory_map) =
          load_kernel(&mut uefi)
             .and_then(|entry_point| {
@@ -111,14 +114,14 @@ fn load_kernel(uefi: &mut uefi::Application)
 
     match kernel_elf {
         Ok(kernel_elf) => {
-            uefi::Console::write_string(uefi, "Loading kernel...\r\n");
+            uefi::Console::write_string(uefi, "\r\nLoading kernel...\r\n");
 
             let virtual_entry = kernel_elf.header().get_entry_point();
 
-            #[cfg(debug_kernel)]
+            #[cfg(feature = "debug_kernel")]
             {
                 uefi.write_fmt(format_args!(
-                    "Entry point (virtual address): {:#018x}\r\n",
+                    "Entry point (virtual address): {:#018X}\r\n",
                     virtual_entry
                 ));
 
@@ -132,39 +135,58 @@ fn load_kernel(uefi: &mut uefi::Application)
                 .map_err(|_| Error::InvalidKernelImage)?;
 
             for program_header in iter {
-                #[cfg(debug_kernel)]
-                {
-                    uefi::Console::write_string(uefi, "Segment:\r\n");
-                    uefi.write_fmt(format_args!(
-                        "vaddr: {:#018x}\r\n",
-                         program_header.get_virtual_address(),
-                    ));
-                    uefi.write_fmt(format_args!(
-                        "filesz: {:#018x}\r\n",
-                         program_header.get_file_size(),
-                    ));
+                if program_header.get_type() != Some(elf::SegmentType::Load) {
+                    continue;
                 }
 
+                let virtual_address = program_header.get_virtual_address();
                 let virtual_size = program_header.get_memory_size();
-                let mut page_count = virtual_size / 4096;
+                let page_base = virtual_address & !(program_header.get_alignment() - 1);
 
+                let mut page_count = (virtual_address + virtual_size - page_base) / 4096;
                 // round up
                 if virtual_size & 0xFFF > 0 {
                     page_count += 1;
                 }
 
+                #[cfg(feature = "debug_kernel")]
+                {
+                    uefi::Console::write_string(uefi, "\r\nSegment:\r\n");
+                    uefi.write_fmt(format_args!(
+                        "offset: {:#018x}\r\n",
+                        program_header.get_offset(),
+                    ));
+                    uefi.write_fmt(format_args!(
+                        "vaddr: {:#018x}\r\n",
+                        program_header.get_virtual_address(),
+                    ));
+                    uefi.write_fmt(format_args!(
+                        "memsz: {:#018x}\r\n",
+                        program_header.get_memory_size(),
+                    ));
+
+                    uefi.write_fmt(format_args!(
+                        "Allocating {} page(s) at {:#018X}\r\n",
+                        page_count,
+                        page_base,
+                    ));
+                }
+
                 let segment_data = kernel_elf.segment_data(program_header)
                     .map_err(|err| core::convert::Into::<Error>::into(err))?;
-                if let Some(buffer) = uefi::Memory::allocate_pages(uefi, page_count) {
-                    // TODO: Zeroing, optimization etc.
 
-                    let (initial, _) = buffer.split_at_mut(segment_data.len());
-                    initial.copy_from_slice(segment_data);
+                let buffer = uefi::Memory::allocate_pages_at(uefi, page_base as u64, page_count);
+                if let Some(buffer) = buffer {
+                    let (_padding, rest) = buffer.split_at_mut(virtual_address - page_base);
+                    let (virtual_data, _padding) = rest.split_at_mut(segment_data.len());
+                    virtual_data.copy_from_slice(segment_data);
 
-                    if virtual_entry >= program_header.get_virtual_address() &&
-                            virtual_entry < program_header.get_virtual_address() + virtual_size
+                    // TODO: Zeroing
+
+                    if virtual_entry >= virtual_address &&
+                            virtual_entry < virtual_address + virtual_size
                     {
-                        let entry_offset = virtual_entry - program_header.get_virtual_address();
+                        let entry_offset = virtual_entry - page_base;
                         entry_point = &buffer[entry_offset]
                             as *const u8
                             as *const core::ffi::c_void;
@@ -174,8 +196,42 @@ fn load_kernel(uefi: &mut uefi::Application)
                 }
             }
 
+            #[cfg(feature = "debug_kernel")]
+            uefi.write_fmt(format_args!(
+                "Kernel entry point in memory: {:#018X}\r\n",
+                entry_point as usize,
+            ));
+
             Ok(entry_point)
         },
         Err(_) => Err(Error::InvalidKernelImage),
     }
+}
+
+#[cfg(feature = "debug_mmap")]
+fn debug_mmap(uefi: &mut uefi::Application) -> Result<(), Error> {
+    let memory_map = uefi::Memory::get_memory_map(uefi)
+        .map_err(|err| core::convert::Into::<Error>::into(err))?;
+
+    uefi::Console::write_string(uefi, "\r\nMemory Map:\r\n");
+    for descriptor in &memory_map {
+        uefi.write_fmt(format_args!(
+            "\r\n{:#018X} - {:#018X}: {}\r\n",
+            descriptor.physical_start,
+            descriptor.physical_start + descriptor.number_of_pages * 4096,
+            match descriptor.r#type {
+                uefi::api::boot_services::memory::EFI_RESERVED_MEMORY_TYPE => "EfiReservedMemoryType",
+                uefi::api::boot_services::memory::EFI_LOADER_DATA => "EfiLoaderData",
+                uefi::api::boot_services::memory::EFI_CONVENTIONAL_MEMORY => "EfiConventionalMemory",
+                uefi::api::boot_services::memory::EFI_UNUSABLE_MEMORY => "EfiUnusableMemory",
+                uefi::api::boot_services::memory::EFI_MEMORY_MAPPED_IO => "EfiMemoryMappedIO",
+                _ => "",
+            },
+        ));
+        uefi.write_fmt(format_args!("type: {:#010x}\r\n", descriptor.r#type));
+        uefi.write_fmt(format_args!("virtual_start: {:#018x}\r\n", descriptor.virtual_start));
+        uefi.write_fmt(format_args!("attribute: {:#018x}\r\n", descriptor.attribute));
+    }
+
+    Ok(())
 }
