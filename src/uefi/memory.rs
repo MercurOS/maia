@@ -134,7 +134,7 @@ impl Memory for Application {
             map_key: map_key,
             map_size: memory_map_size,
             descriptor_size: descriptor_size,
-            descriptor_version: descriptor_ver,
+            _descriptor_version: descriptor_ver,
             map_handle: memory_map as *const memory::EfiMemoryDescriptor,
         })
     }
@@ -146,7 +146,7 @@ pub struct MemoryMap {
     pub map_key: usize,
     map_size: usize,
     descriptor_size: usize,
-    descriptor_version: u32,
+    _descriptor_version: u32,
     map_handle: *const memory::EfiMemoryDescriptor,
 }
 

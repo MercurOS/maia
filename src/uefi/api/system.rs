@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub const SYSTEM_TABLE_SIGNATURE: u64 = 0x5453595320494249;
 
 #[repr(C)]

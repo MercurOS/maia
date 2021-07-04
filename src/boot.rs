@@ -1,5 +1,3 @@
-use core::fmt::Write;
-
 use super::{elf, kernel, uefi};
 
 pub enum Error {
@@ -31,7 +29,7 @@ impl core::convert::From<uefi::UEFIError> for Error {
 }
 
 impl core::convert::From<elf::ElfError> for Error {
-    fn from(error: elf::ElfError) -> Error {
+    fn from(_error: elf::ElfError) -> Error {
         Error::InvalidKernelImage
     }
 }

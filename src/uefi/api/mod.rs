@@ -21,8 +21,6 @@ pub type EfiEvent = *mut core::ffi::c_void;
 pub type EfiPhyiscalAddress = u64;
 pub type EfiVirtualAddress = u64;
 
-pub type EfiGuid = [u8; 16];
-
 #[repr(C)]
 pub struct EfiTableHeader {
     pub signature: u64,

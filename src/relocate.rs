@@ -23,7 +23,7 @@ pub unsafe fn relocate(
     // find relocation table
     let mut i: usize = 0;
     loop {
-        let entry = unsafe { & *elf_dyn.add(i) };
+        let entry = & *elf_dyn.add(i);
 
         match entry.tag {
             DT_NULL => break,
@@ -59,14 +59,14 @@ pub unsafe fn relocate(
             break;
         }
 
-        let entry = unsafe { & *(rel_addr as *const ElfRela) };
+        let entry = & *(rel_addr as *const ElfRela);
 
         match entry.info {
             R_RISCV_RELATIVE => {
                 let address = base_address.add(entry.offset) as *mut u64;
                 let value = base_address.offset(entry.addend as isize) as u64;
 
-                unsafe { address.write(value) };
+                address.write(value);
             },
             _ => return EfiStatus::load_error(),
         }
