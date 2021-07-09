@@ -1,9 +1,7 @@
-use super::util::raw_cast;
 use super::{
-    header,
-    program_header::ProgramHeader,
-    ElfError,
-    Header,
+    header, Dynamic, ElfError, Header, RelocationTable,
+    program_header::{ProgramHeader, SegmentType},
+    util::raw_cast,
 };
 
 pub struct ElfFile<'a> {
@@ -57,6 +55,27 @@ impl <'a> ElfFile<'a> {
         } else {
             Err(ElfError::BufferOverflow)
         }
+    }
+
+    // FIXME: Technically this breaks lifetime guarantees with the returned
+    // RelocationTable, since it should be constrained to the lifetime of
+    // the `raw_buffer` of this ElfFile.
+    pub fn relocation_table(&self) -> Result<Option<RelocationTable>, ElfError> {
+        for program_header in self.program_headers()? {
+            if program_header.get_type() == Some(SegmentType::Dynamic) {
+                // FIXME: Constrain dynamic tag array size to dynamic segment buffer size
+                let relocation_table = unsafe {
+                    Dynamic::find_relocations_inner(
+                        &self.raw_buffer[0] as *const u8 as *const core::ffi::c_void,
+                        &self.segment_data(program_header)?[0] as *const u8 as *const Dynamic,
+                    )?
+                };
+
+                return Ok(relocation_table);
+            }
+        }
+
+        Ok(None)
     }
 }
 

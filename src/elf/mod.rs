@@ -9,8 +9,9 @@ mod util;
 use header::Header;
 
 pub use self::{
+    dynamic::{Dynamic, RelocationTable},
     elf_file::ElfFile,
     error::ElfError,
     header::{ElfClass, ElfMachine},
-    program_header::SegmentType,
+    program_header::{ProgramHeader, SegmentType},
 };

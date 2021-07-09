@@ -1,3 +1,5 @@
+use core::fmt::Write;
+
 use super::{elf, kernel, uefi};
 
 pub enum Error {
@@ -34,6 +36,23 @@ impl core::convert::From<elf::ElfError> for Error {
     }
 }
 
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Error::MemoryAllocationFailed =>
+                    "Memory allocation failed!",
+                Error::MemoryMapUnavailable =>
+                    "Memory map unavailable!",
+                Error::InvalidKernelImage =>
+                    "Invalid kernel image!",
+            }
+        )
+    }
+}
+
 pub fn boot(mut uefi: uefi::Application) -> Result<(), Error> {
     uefi::Console::clear_screen(&mut uefi);
     uefi::Console::write_string(
@@ -44,35 +63,26 @@ pub fn boot(mut uefi: uefi::Application) -> Result<(), Error> {
     #[cfg(feature = "debug_mmap")]
     debug_mmap(&mut uefi)?;
 
-    let (entry_point, memory_map) =
-         load_kernel(&mut uefi)
-            .and_then(|entry_point| {
-                if entry_point.is_null() {
-                    uefi::Console::write_string(
-                        &mut uefi,
-                        "Unable to determine entry point!\r\n"
-                    );
-                    return Err(Error::InvalidKernelImage);
-                }
+    let entry_point = load_kernel(&mut uefi, &kernel::KERNEL.borrow()[..])
+        .map_err(|error| {
+            uefi.write_fmt(format_args!("{}\r\n", error));
+            error
+        })?;
 
-                uefi::Memory::get_memory_map(&mut uefi)
-                    .map(|memory_map| (entry_point, memory_map))
-                    .map_err(|error| error.into())
-            })
-            .map_err(|error| {
-                uefi::Console::write_string(
-                    &mut uefi,
-                    match error {
-                        Error::MemoryAllocationFailed =>
-                            "Memory allocation failed!\r\n",
-                        Error::MemoryMapUnavailable =>
-                            "Memory map unavailable!\r\n",
-                        Error::InvalidKernelImage =>
-                            "Invalid kernel image!\r\n",
-                    }
-                );
-                error
-            })?;
+    if entry_point.is_null() {
+        uefi::Console::write_string(
+            &mut uefi,
+            "Unable to determine entry point!\r\n"
+        );
+        return Err(Error::InvalidKernelImage);
+    }
+
+    let memory_map = uefi::Memory::get_memory_map(&mut uefi)
+        .map_err(|error| {
+            let error: Error = error.into();
+            uefi.write_fmt(format_args!("{}\r\n", error));
+            error
+        })?;
 
     uefi::Console::write_string(&mut uefi, "\r\nBooting to OS\r\n");
     if uefi::Image::exit_boot_services(uefi, &memory_map).is_err() {
@@ -94,120 +104,225 @@ pub fn boot(mut uefi: uefi::Application) -> Result<(), Error> {
     loop {}
 }
 
-#[inline(always)]
-fn load_kernel(uefi: &mut uefi::Application)
-    -> Result<*const core::ffi::c_void, Error>
-{
-    // TODO: Currently segment.virtual_address values are ignored,
-    // and segments are placed in random memory locations.
-    // Essentially, the loaded kernel will be unable to reference
-    // anything contained in the ELF image at all (outside of relative
-    // offsets within the entry point segment).
+/// Load and prepare kernel from ELF image.
+fn load_kernel(
+    uefi: &mut uefi::Application,
+    elf_data: &[u8],
+) -> Result<*const core::ffi::c_void, Error> {
+    if let Ok(kernel_elf) = unsafe { elf::ElfFile::from_buffer(elf_data) } {
+        uefi::Console::write_string(uefi, "\r\nLoading kernel...\r\n");
 
-    let kernel_elf = unsafe {
-        elf::ElfFile::from_buffer(&kernel::KERNEL.borrow()[..])
-    };
+        let virtual_entry = kernel_elf.header().get_entry_point();
+        let (virtual_base, page_count) = get_elf_memory_info(uefi, &kernel_elf)?;
+        let relocation_table: Option<elf::RelocationTable> = kernel_elf.relocation_table()?;
 
-    let mut entry_point: *const core::ffi::c_void = core::ptr::null();
-
-    match kernel_elf {
-        Ok(kernel_elf) => {
-            uefi::Console::write_string(uefi, "\r\nLoading kernel...\r\n");
-
-            let virtual_entry = kernel_elf.header().get_entry_point();
-
-            #[cfg(feature = "debug_kernel")]
-            {
-                uefi.write_fmt(format_args!(
-                    "Entry point (virtual address): {:#018X}\r\n",
-                    virtual_entry
-                ));
-
-                uefi.write_fmt(format_args!(
-                    "Segment count: {}\r\n",
-                     kernel_elf.header().get_program_header_info().entry_count,
-                ));
-            }
-
-            let iter = kernel_elf.program_headers()
-                .map_err(|_| Error::InvalidKernelImage)?;
-
-            for program_header in iter {
-                if program_header.get_type() != Some(elf::SegmentType::Load) {
-                    continue;
-                }
-
-                let virtual_address = program_header.get_virtual_address();
-                let virtual_size = program_header.get_memory_size();
-                let page_base = virtual_address & !(program_header.get_alignment() - 1);
-
-                let mut page_count = (virtual_address + virtual_size - page_base) / 4096;
-                // round up
-                if virtual_size & 0xFFF > 0 {
-                    page_count += 1;
-                }
-
-                #[cfg(feature = "debug_kernel")]
-                {
-                    uefi::Console::write_string(uefi, "\r\nSegment:\r\n");
-                    uefi.write_fmt(format_args!(
-                        "offset: {:#018x}\r\n",
-                        program_header.get_offset(),
-                    ));
-                    uefi.write_fmt(format_args!(
-                        "vaddr: {:#018x}\r\n",
-                        program_header.get_virtual_address(),
-                    ));
-                    uefi.write_fmt(format_args!(
-                        "memsz: {:#018x}\r\n",
-                        program_header.get_memory_size(),
-                    ));
-
-                    uefi.write_fmt(format_args!(
-                        "Allocating {} page(s) at {:#018X}\r\n",
-                        page_count,
-                        page_base,
-                    ));
-                }
-
-                let segment_data = kernel_elf.segment_data(program_header)
-                    .map_err(|err| core::convert::Into::<Error>::into(err))?;
-
-                let buffer = uefi::Memory::allocate_pages_at(uefi, page_base as u64, page_count);
-                if let Some(buffer) = buffer {
-                    let (_padding, rest) = buffer.split_at_mut(virtual_address - page_base);
-                    let (virtual_data, _padding) = rest.split_at_mut(segment_data.len());
-                    virtual_data.copy_from_slice(segment_data);
-
-                    // TODO: Zeroing
-
-                    if virtual_entry >= virtual_address &&
-                            virtual_entry < virtual_address + virtual_size
-                    {
-                        let entry_offset = virtual_entry - page_base;
-                        entry_point = &buffer[entry_offset]
-                            as *const u8
-                            as *const core::ffi::c_void;
-                    }
-                } else {
-                    return Err(Error::MemoryAllocationFailed);
-                }
-            }
-
-            #[cfg(feature = "debug_kernel")]
+        #[cfg(feature = "debug_kernel")]
+        {
             uefi.write_fmt(format_args!(
-                "Kernel entry point in memory: {:#018X}\r\n",
-                entry_point as usize,
+                "\r\nEntry point (virtual address): {:#018X}\r\n",
+                virtual_entry
             ));
 
-            Ok(entry_point)
-        },
-        Err(_) => Err(Error::InvalidKernelImage),
+            uefi.write_fmt(format_args!(
+                "Segment count: {}\r\n",
+                 kernel_elf.header().get_program_header_info().entry_count,
+            ));
+
+            if relocation_table.is_some() {
+                uefi::Console::write_string(uefi, "Relocation table present\r\n");
+            }
+        }
+
+        let kernel_buffer = allocate_elf_memory(
+            uefi,
+            virtual_base,
+            page_count,
+            relocation_table.is_some(),
+        )?;
+
+        // TODO: This is how the ELF base address is defined. I don't see the point, so
+        // probably I'm doing something wrong here...
+        let base_address = calculate_base_address(
+            uefi,
+            virtual_base,
+            kernel_buffer,
+        );
+        let physical_base = (virtual_base as i64 + base_address) as *const core::ffi::c_void;
+
+        copy_elf_memory(&kernel_elf, virtual_base, kernel_buffer)?;
+
+        // apply relocations
+        if let Some(relocations) = relocation_table.as_ref() {
+            #[cfg(feature = "debug_kernel")]
+            uefi::Console::write_string(uefi, "\r\nApplying relocations:\r\n");
+
+            for rela in relocations {
+                #[cfg(feature = "debug_kernel")]
+                uefi.write_fmt(format_args!(
+                    "RELA [{:#x}] {:#018x}, {:#018x}\r\n",
+                    rela.info,
+                    rela.offset,
+                    rela.addend,
+                ));
+
+                match rela.info {
+                    elf::dynamic::R_RISCV_RELATIVE => {
+                        unsafe {
+                            let address = physical_base.add(rela.offset) as *mut u64;
+                            let value = physical_base.offset(rela.addend as isize) as u64;
+
+                            address.write(value);
+                        }
+                    },
+                    _ => return Err(Error::InvalidKernelImage),
+                }
+            }
+        };
+
+        let entry_point = (virtual_entry as i64 + base_address) as *const core::ffi::c_void;
+
+        #[cfg(feature = "debug_kernel")]
+        uefi.write_fmt(format_args!(
+            "Kernel entry point in memory: {:#018X}\r\n",
+            entry_point as usize,
+        ));
+
+        Ok(entry_point)
+    } else {
+        Err(Error::InvalidKernelImage)
     }
+}
+
+fn get_elf_memory_info(
+    _uefi: &mut uefi::Application,
+    kernel_elf: &elf::ElfFile,
+) -> Result<(usize, usize), Error> {
+    let program_headers = kernel_elf.program_headers()
+        .map_err(|_| Error::InvalidKernelImage)?;
+
+    let mut memory_limits: Option<(usize, usize, usize)> = None;
+    for program_header in program_headers {
+        if program_header.get_type() != Some(elf::SegmentType::Load) {
+            continue;
+        }
+
+        let base = program_header.get_page_base();
+        let address = program_header.get_virtual_address();
+        let size = program_header.get_memory_size();
+
+        #[cfg(feature = "debug_kernel")]
+        {
+            uefi::Console::write_string(_uefi, "\r\nSegment:\r\n");
+            _uefi.write_fmt(format_args!("offset: {:#018x}\r\n", program_header.get_offset()));
+            _uefi.write_fmt(format_args!("vaddr: {:#018x}\r\n", address));
+            _uefi.write_fmt(format_args!("memsz: {:#018x}\r\n", size));
+        }
+
+        if let Some((lowest_base, highest_address, highest_size)) = memory_limits {
+            if base < lowest_base {
+                memory_limits = Some((base, highest_address, highest_size));
+            } else if address > highest_address {
+                memory_limits = Some((lowest_base, address, size));
+            }
+        } else {
+            memory_limits = Some((base, address, size));
+        }
+    }
+
+    if let Some((lowest_base, highest_address, highest_size)) = memory_limits {
+        let mut page_count = (highest_address + highest_size - lowest_base) / 4096;
+        // round up
+        if highest_size & 0xFFF > 0 {
+            page_count += 1;
+        }
+
+        #[cfg(feature = "debug_kernel")]
+        _uefi.write_fmt(format_args!("\r\nvirtual_base: {:#018x}\r\n", lowest_base));
+
+        Ok((lowest_base, page_count))
+    } else {
+        Err(Error::InvalidKernelImage)
+    }
+}
+
+/// Allocate memory for the ELF file.
+fn allocate_elf_memory(
+    uefi: &mut uefi::Application,
+    virtual_base: usize,
+    page_count: usize,
+    dynamic: bool,
+) -> Result<&'static mut [u8], Error> {
+    #[cfg(feature = "debug_kernel")]
+    {
+        if dynamic {
+            uefi.write_fmt(format_args!("\r\nAllocating {} page(s)\r\n", page_count));
+        } else {
+            uefi.write_fmt(format_args!(
+                "\r\nAllocating {} page(s) at {:#018X}\r\n",
+                page_count,
+                virtual_base,
+            ));
+        }
+    }
+
+    let buffer = {
+        if dynamic {
+            uefi::Memory::allocate_pages(uefi, page_count)
+        } else {
+            uefi::Memory::allocate_pages_at(uefi, virtual_base as u64, page_count)
+        }
+    };
+
+    match buffer {
+        Some(buffer) => Ok(buffer),
+        None => Err(Error::MemoryAllocationFailed),
+    }
+}
+
+fn calculate_base_address(
+    _uefi: &mut uefi::Application,
+    virtual_base: usize,
+    buffer: &[u8],
+) -> i64 {
+    let physical_base = &buffer[0] as *const u8 as u64;
+    let base_address = physical_base as i64 - virtual_base as i64;
+
+    #[cfg(feature = "debug_kernel")]
+    _uefi.write_fmt(format_args!("\r\nELF base address: {:#018X}\r\n", base_address));
+
+    base_address
+}
+
+/// Copy ELF loadable segments into memory.
+fn copy_elf_memory(
+    kernel_elf: &elf::ElfFile,
+    virtual_base: usize,
+    target_buffer: &mut [u8],
+) -> Result<(), Error> {
+    let program_headers = kernel_elf.program_headers()
+        .map_err(|_| Error::InvalidKernelImage)?;
+
+    for program_header in program_headers {
+        if program_header.get_type() != Some(elf::SegmentType::Load) {
+            continue;
+        }
+
+        let offset = program_header.get_virtual_address() - virtual_base;
+
+        let file_buffer = kernel_elf.segment_data(program_header)
+            .map_err(|err| core::convert::Into::<Error>::into(err))?;
+
+        let target_buffer = &mut target_buffer[offset..(offset + file_buffer.len())];
+        target_buffer.copy_from_slice(file_buffer);
+    }
+
+    Ok(())
 }
 
 #[cfg(feature = "debug_mmap")]
 fn debug_mmap(uefi: &mut uefi::Application) -> Result<(), Error> {
+    use uefi::api::boot_services::memory;
+
     let memory_map = uefi::Memory::get_memory_map(uefi)
         .map_err(|err| core::convert::Into::<Error>::into(err))?;
 
@@ -218,11 +333,11 @@ fn debug_mmap(uefi: &mut uefi::Application) -> Result<(), Error> {
             descriptor.physical_start,
             descriptor.physical_start + descriptor.number_of_pages * 4096,
             match descriptor.r#type {
-                uefi::api::boot_services::memory::EFI_RESERVED_MEMORY_TYPE => "EfiReservedMemoryType",
-                uefi::api::boot_services::memory::EFI_LOADER_DATA => "EfiLoaderData",
-                uefi::api::boot_services::memory::EFI_CONVENTIONAL_MEMORY => "EfiConventionalMemory",
-                uefi::api::boot_services::memory::EFI_UNUSABLE_MEMORY => "EfiUnusableMemory",
-                uefi::api::boot_services::memory::EFI_MEMORY_MAPPED_IO => "EfiMemoryMappedIO",
+                memory::EFI_RESERVED_MEMORY_TYPE => "EfiReservedMemoryType",
+                memory::EFI_LOADER_DATA => "EfiLoaderData",
+                memory::EFI_CONVENTIONAL_MEMORY => "EfiConventionalMemory",
+                memory::EFI_UNUSABLE_MEMORY => "EfiUnusableMemory",
+                memory::EFI_MEMORY_MAPPED_IO => "EfiMemoryMappedIO",
                 _ => "",
             },
         ));

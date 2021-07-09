@@ -34,6 +34,19 @@ impl ProgramHeader {
     pub fn get_alignment(&self) -> usize {
         self.align as usize
     }
+
+    pub fn get_page_base(&self) -> usize {
+        self.get_virtual_address() & !(self.get_alignment() - 1)
+    }
+
+    pub fn address_in_segment(&self, virtual_address: usize) -> bool {
+        if virtual_address >= self.get_virtual_address() {
+            if virtual_address < self.get_virtual_address() + self.get_memory_size() {
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 #[derive(PartialEq)]
