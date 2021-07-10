@@ -5,6 +5,7 @@ use super::{elf, kernel, uefi};
 pub enum Error {
     MemoryAllocationFailed,
     MemoryMapUnavailable,
+    DeviceTreeUnavailable,
     InvalidKernelImage,
 }
 
@@ -46,6 +47,8 @@ impl core::fmt::Display for Error {
                     "Memory allocation failed!",
                 Error::MemoryMapUnavailable =>
                     "Memory map unavailable!",
+                Error::DeviceTreeUnavailable =>
+                    "DeviceTree not found!",
                 Error::InvalidKernelImage =>
                     "Invalid kernel image!",
             }
@@ -77,6 +80,14 @@ pub fn boot(mut uefi: uefi::Application) -> Result<(), Error> {
         return Err(Error::InvalidKernelImage);
     }
 
+    let dtb = match uefi::Configuration::get_dtb(&mut uefi) {
+        Some(dtb) => dtb,
+        None => {
+            uefi.write_fmt(format_args!("{}\r\n", Error::DeviceTreeUnavailable));
+            return Err(Error::DeviceTreeUnavailable);
+        },
+    };
+
     let memory_map = uefi::Memory::get_memory_map(&mut uefi)
         .map_err(|error| {
             let error: Error = error.into();
@@ -92,11 +103,14 @@ pub fn boot(mut uefi: uefi::Application) -> Result<(), Error> {
         loop {}
     }
 
+    // TODO: Pass memory map to kernel
+
     // Jump to kernel
     unsafe {
         asm!(
             "jalr ra, 0({0})",
             in(reg) entry_point,
+            in("a0") dtb,
             out("ra") _,
         );
     }

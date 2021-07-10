@@ -1,10 +1,9 @@
 use super::{
+    Application, UEFIError,
     api::{
-        boot_services::memory,
         EfiPhyiscalAddress,
+        boot_services::memory,
     },
-    Application,
-    UEFIError,
 };
 
 pub trait Memory {

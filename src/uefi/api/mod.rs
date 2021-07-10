@@ -1,7 +1,8 @@
 // External interface definitions for the UEFI API
 
-pub mod protocols;
 pub mod boot_services;
+pub mod configuration;
+pub mod protocols;
 pub mod system;
 
 #[repr(C)]
@@ -17,6 +18,8 @@ pub struct EfiStatus(usize);
 pub type EfiHandle = *mut core::ffi::c_void;
 
 pub type EfiEvent = *mut core::ffi::c_void;
+
+pub type EfiGuid = [u8; 16];
 
 pub type EfiPhyiscalAddress = u64;
 pub type EfiVirtualAddress = u64;

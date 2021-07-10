@@ -15,4 +15,6 @@ pub struct EfiSystemTable {
     pub console_error: *mut super::protocols::SimpleTextOutputProtocol,
     _runtime_services: *const core::ffi::c_void,
     pub boot_services: *mut super::boot_services::EfiBootServices,
+    pub number_of_table_entries: usize,
+    pub configuration_table: *const super::configuration::EfiConfigurationTable,
 }
