@@ -103,14 +103,13 @@ pub fn boot(mut uefi: uefi::Application) -> Result<(), Error> {
         loop {}
     }
 
-    // TODO: Pass memory map to kernel
-
     // Jump to kernel
     unsafe {
         asm!(
             "jalr ra, 0({0})",
             in(reg) entry_point,
             in("a0") dtb,
+            in("a1") &memory_map as *const _,
             out("ra") _,
         );
     }
@@ -349,6 +348,8 @@ fn debug_mmap(uefi: &mut uefi::Application) -> Result<(), Error> {
             match descriptor.r#type {
                 memory::EFI_RESERVED_MEMORY_TYPE => "EfiReservedMemoryType",
                 memory::EFI_LOADER_DATA => "EfiLoaderData",
+                memory::EFI_BOOT_SERVICES_CODE => "EfiBootServicesCode",
+                memory::EFI_BOOT_SERVICES_DATA => "EfiBootServicesData",
                 memory::EFI_CONVENTIONAL_MEMORY => "EfiConventionalMemory",
                 memory::EFI_UNUSABLE_MEMORY => "EfiUnusableMemory",
                 memory::EFI_MEMORY_MAPPED_IO => "EfiMemoryMappedIO",

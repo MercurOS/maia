@@ -8,15 +8,14 @@
 use core::panic::PanicInfo;
 use core::ffi::c_void;
 
+use mercuros_uefi::{EfiHandle, EfiStatus, EfiSystemTable};
+
 pub mod assembly;
 pub mod kernel;
 
 mod boot;
 mod elf;
 mod relocate;
-mod uefi;
-
-use uefi::EfiStatus;
 
 #[no_mangle]
 pub extern "C" fn relocate(
@@ -28,11 +27,11 @@ pub extern "C" fn relocate(
 
 #[no_mangle]
 pub extern "efiapi" fn efi_main(
-    image_handle: uefi::EfiHandle,
-    system_table: *mut uefi::EfiSystemTable,
+    image_handle: EfiHandle,
+    system_table: *mut EfiSystemTable,
 ) -> EfiStatus {
     let uefi = unsafe {
-        uefi::Application::from(image_handle, system_table)
+        mercuros_uefi::Application::from(image_handle, system_table)
     };
 
     if let Some(uefi) = uefi {

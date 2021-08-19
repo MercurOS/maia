@@ -13,6 +13,7 @@ debug_mmap = []
 debug_all = ["debug_kernel", "debug_mmap"]
 
 [dependencies]
+mercuros-uefi = { git = "https://github.com/MercurOS/uefi", tag = "v0.1.0" }
 
 [build-dependencies]
 llvm-tools = "0.1"
