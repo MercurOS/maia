@@ -98,8 +98,14 @@ impl Memory for Application {
             }
         }
 
-        // account for the memory map pool allocation
-        memory_map_size += descriptor_size;
+        // Account for the memory map pool allocation.
+        // Note: Account for two descriptors, since technically it is possible
+        // that memory is allocated from the middle of a free region, adding
+        // a descriptor for the allocated memory and a descriptor for the
+        // remaining free region. This should be unlikely, e.g. U-Boot always
+        // allocates from the edge of free memory regions, but we might as well
+        // account for the possibility.
+        memory_map_size += descriptor_size * 2;
 
         // allocate memory for the memory map
         match self.allocate(memory_map_size) {
@@ -134,18 +140,21 @@ impl Memory for Application {
             map_size: memory_map_size,
             descriptor_size: descriptor_size,
             _descriptor_version: descriptor_ver,
+            _padding: 0,
             map_handle: memory_map as *const memory::EfiMemoryDescriptor,
         })
     }
 }
 
 /// Memory safety: Dropping MemoryMap without freeing the allocated
-/// `_map_handle` will leak memory
+/// `map_handle` will leak memory
+#[repr(C)]
 pub struct MemoryMap {
     pub map_key: usize,
     map_size: usize,
     descriptor_size: usize,
     _descriptor_version: u32,
+    _padding: u32,
     map_handle: *const memory::EfiMemoryDescriptor,
 }
 
