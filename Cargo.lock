@@ -11,4 +11,10 @@ name = "mercuros-maia"
 version = "0.0.1"
 dependencies = [
  "llvm-tools",
+ "mercuros-uefi",
 ]
+
+[[package]]
+name = "mercuros-uefi"
+version = "0.1.0"
+source = "git+https://github.com/MercurOS/uefi?tag=v0.1.0#53c40932d97abac3ab74073f531f96971c009343"

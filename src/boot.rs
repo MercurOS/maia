@@ -1,6 +1,8 @@
 use core::fmt::Write;
 
-use super::{elf, kernel, uefi};
+use mercuros_uefi::{EfiStatus, UEFIError};
+
+use super::{elf, kernel};
 
 pub enum Error {
     MemoryAllocationFailed,
@@ -9,21 +11,21 @@ pub enum Error {
     InvalidKernelImage,
 }
 
-impl core::convert::From<Error> for uefi::EfiStatus {
-    fn from(error: Error) -> uefi::EfiStatus {
+impl core::convert::From<Error> for EfiStatus {
+    fn from(error: Error) -> EfiStatus {
         match error {
             Error::MemoryAllocationFailed =>
-                uefi::EfiStatus::out_of_resources(),
+                EfiStatus::out_of_resources(),
             _ =>
-                uefi::EfiStatus::load_error(),
+                EfiStatus::load_error(),
         }
     }
 }
 
-impl core::convert::From<uefi::UEFIError> for Error {
-    fn from(error: uefi::UEFIError) -> Error {
+impl core::convert::From<UEFIError> for Error {
+    fn from(error: UEFIError) -> Error {
         match error {
-            uefi::UEFIError::MemoryAllocationFailed =>
+            UEFIError::MemoryAllocationFailed =>
                 Error::MemoryAllocationFailed,
             _ =>
                 Error::MemoryMapUnavailable,
@@ -56,9 +58,9 @@ impl core::fmt::Display for Error {
     }
 }
 
-pub fn boot(mut uefi: uefi::Application) -> Result<(), Error> {
-    uefi::Console::clear_screen(&mut uefi);
-    uefi::Console::write_string(
+pub fn boot(mut uefi: mercuros_uefi::Application) -> Result<(), Error> {
+    mercuros_uefi::Console::clear_screen(&mut uefi);
+    mercuros_uefi::Console::write_string(
         &mut uefi,
         "MercurOS Maia Bootloader\r\n"
     );
@@ -73,14 +75,14 @@ pub fn boot(mut uefi: uefi::Application) -> Result<(), Error> {
         })?;
 
     if entry_point.is_null() {
-        uefi::Console::write_string(
+        mercuros_uefi::Console::write_string(
             &mut uefi,
             "Unable to determine entry point!\r\n"
         );
         return Err(Error::InvalidKernelImage);
     }
 
-    let dtb = match uefi::Configuration::get_dtb(&mut uefi) {
+    let dtb = match mercuros_uefi::Configuration::get_dtb(&mut uefi) {
         Some(dtb) => dtb,
         None => {
             uefi.write_fmt(format_args!("{}\r\n", Error::DeviceTreeUnavailable));
@@ -88,15 +90,15 @@ pub fn boot(mut uefi: uefi::Application) -> Result<(), Error> {
         },
     };
 
-    let memory_map = uefi::Memory::get_memory_map(&mut uefi)
+    let memory_map = mercuros_uefi::Memory::get_memory_map(&mut uefi)
         .map_err(|error| {
             let error: Error = error.into();
             uefi.write_fmt(format_args!("{}\r\n", error));
             error
         })?;
 
-    uefi::Console::write_string(&mut uefi, "\r\nBooting to OS\r\n");
-    if uefi::Image::exit_boot_services(uefi, &memory_map).is_err() {
+    mercuros_uefi::Console::write_string(&mut uefi, "\r\nBooting to OS\r\n");
+    if mercuros_uefi::Image::exit_boot_services(uefi, &memory_map).is_err() {
         // Unfortunately, we currently cannot handle errors here.
         // UEFI boot services are in an indeterminate state so we cannot
         // return either...
@@ -119,11 +121,11 @@ pub fn boot(mut uefi: uefi::Application) -> Result<(), Error> {
 
 /// Load and prepare kernel from ELF image.
 fn load_kernel(
-    uefi: &mut uefi::Application,
+    uefi: &mut mercuros_uefi::Application,
     elf_data: &[u8],
 ) -> Result<*const core::ffi::c_void, Error> {
     if let Ok(kernel_elf) = unsafe { elf::ElfFile::from_buffer(elf_data) } {
-        uefi::Console::write_string(uefi, "\r\nLoading kernel...\r\n");
+        mercuros_uefi::Console::write_string(uefi, "\r\nLoading kernel...\r\n");
 
         let virtual_entry = kernel_elf.header().get_entry_point();
         let (virtual_base, page_count) = get_elf_memory_info(uefi, &kernel_elf)?;
@@ -167,7 +169,7 @@ fn load_kernel(
         // apply relocations
         if let Some(relocations) = relocation_table.as_ref() {
             #[cfg(feature = "debug_kernel")]
-            uefi::Console::write_string(uefi, "\r\nApplying relocations:\r\n");
+            mercuros_uefi::Console::write_string(uefi, "\r\nApplying relocations:\r\n");
 
             for rela in relocations {
                 #[cfg(feature = "debug_kernel")]
@@ -207,7 +209,7 @@ fn load_kernel(
 }
 
 fn get_elf_memory_info(
-    _uefi: &mut uefi::Application,
+    _uefi: &mut mercuros_uefi::Application,
     kernel_elf: &elf::ElfFile,
 ) -> Result<(usize, usize), Error> {
     let program_headers = kernel_elf.program_headers()
@@ -225,7 +227,7 @@ fn get_elf_memory_info(
 
         #[cfg(feature = "debug_kernel")]
         {
-            uefi::Console::write_string(_uefi, "\r\nSegment:\r\n");
+            mercuros_uefi::Console::write_string(_uefi, "\r\nSegment:\r\n");
             _uefi.write_fmt(format_args!("offset: {:#018x}\r\n", program_header.get_offset()));
             _uefi.write_fmt(format_args!("vaddr: {:#018x}\r\n", address));
             _uefi.write_fmt(format_args!("memsz: {:#018x}\r\n", size));
@@ -260,7 +262,7 @@ fn get_elf_memory_info(
 
 /// Allocate memory for the ELF file.
 fn allocate_elf_memory(
-    uefi: &mut uefi::Application,
+    uefi: &mut mercuros_uefi::Application,
     virtual_base: usize,
     page_count: usize,
     dynamic: bool,
@@ -280,9 +282,9 @@ fn allocate_elf_memory(
 
     let buffer = {
         if dynamic {
-            uefi::Memory::allocate_pages(uefi, page_count)
+            mercuros_uefi::Memory::allocate_pages(uefi, page_count)
         } else {
-            uefi::Memory::allocate_pages_at(uefi, virtual_base as u64, page_count)
+            mercuros_uefi::Memory::allocate_pages_at(uefi, virtual_base as u64, page_count)
         }
     };
 
@@ -293,7 +295,7 @@ fn allocate_elf_memory(
 }
 
 fn calculate_base_address(
-    _uefi: &mut uefi::Application,
+    _uefi: &mut mercuros_uefi::Application,
     virtual_base: usize,
     buffer: &[u8],
 ) -> i64 {
@@ -333,13 +335,13 @@ fn copy_elf_memory(
 }
 
 #[cfg(feature = "debug_mmap")]
-fn debug_mmap(uefi: &mut uefi::Application) -> Result<(), Error> {
-    use uefi::api::boot_services::memory;
+fn debug_mmap(uefi: &mut mercuros_uefi::Application) -> Result<(), Error> {
+    use mercuros_uefi::api::boot_services::memory;
 
-    let memory_map = uefi::Memory::get_memory_map(uefi)
+    let memory_map = mercuros_uefi::Memory::get_memory_map(uefi)
         .map_err(|err| core::convert::Into::<Error>::into(err))?;
 
-    uefi::Console::write_string(uefi, "\r\nMemory Map:\r\n");
+    mercuros_uefi::Console::write_string(uefi, "\r\nMemory Map:\r\n");
     for descriptor in &memory_map {
         uefi.write_fmt(format_args!(
             "\r\n{:#018X} - {:#018X}: {}\r\n",
