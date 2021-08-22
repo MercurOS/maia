@@ -39,6 +39,22 @@ impl ProgramHeader {
         self.get_virtual_address() & !(self.get_alignment() - 1)
     }
 
+    pub fn get_file_base(&self) -> usize {
+        self.get_offset() & !(self.get_alignment() - 1)
+    }
+
+    pub fn get_page_count(&self) -> usize {
+        let size = self.get_memory_size();
+        let mut page_count = size / 4096;
+
+        // round up
+        if size & 0xFFF > 0 {
+            page_count += 1;
+        }
+
+        page_count
+    }
+
     pub fn address_in_segment(&self, virtual_address: usize) -> bool {
         if virtual_address >= self.get_virtual_address() {
             if virtual_address < self.get_virtual_address() + self.get_memory_size() {

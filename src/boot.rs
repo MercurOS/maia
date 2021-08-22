@@ -144,7 +144,7 @@ fn load_kernel(
             ));
 
             if relocation_table.is_some() {
-                uefi::Console::write_string(uefi, "Relocation table present\r\n");
+                mercuros_uefi::Console::write_string(uefi, "Relocation table present\r\n");
             }
         }
 
@@ -164,7 +164,7 @@ fn load_kernel(
         );
         let physical_base = (virtual_base as i64 + base_address) as *const core::ffi::c_void;
 
-        copy_elf_memory(&kernel_elf, virtual_base, kernel_buffer)?;
+        copy_elf_memory(uefi, &kernel_elf, virtual_base, kernel_buffer)?;
 
         // apply relocations
         if let Some(relocations) = relocation_table.as_ref() {
@@ -230,6 +230,7 @@ fn get_elf_memory_info(
             mercuros_uefi::Console::write_string(_uefi, "\r\nSegment:\r\n");
             _uefi.write_fmt(format_args!("offset: {:#018x}\r\n", program_header.get_offset()));
             _uefi.write_fmt(format_args!("vaddr: {:#018x}\r\n", address));
+            _uefi.write_fmt(format_args!("filesz: {:#018x}\r\n", program_header.get_file_size()));
             _uefi.write_fmt(format_args!("memsz: {:#018x}\r\n", size));
         }
 
@@ -310,6 +311,7 @@ fn calculate_base_address(
 
 /// Copy ELF loadable segments into memory.
 fn copy_elf_memory(
+    _uefi: &mut mercuros_uefi::Application,
     kernel_elf: &elf::ElfFile,
     virtual_base: usize,
     target_buffer: &mut [u8],
@@ -322,13 +324,29 @@ fn copy_elf_memory(
             continue;
         }
 
-        let offset = program_header.get_virtual_address() - virtual_base;
+        let page_base = program_header.get_page_base();
+        let page_count = program_header.get_page_count();
 
-        let file_buffer = kernel_elf.segment_data(program_header)
+        #[cfg(feature = "debug_kernel")]
+        _uefi.write_fmt(format_args!(
+            "Copying {} page(s) from offset {:#018x} to {:#018x}\r\n",
+            page_count,
+            program_header.get_file_base(),
+            page_base
+        ));
+
+        kernel_elf.copy_segment_pages(
+            program_header,
+            &mut target_buffer[page_base..(page_base + page_count * 4096)]
+        )
             .map_err(|err| core::convert::Into::<Error>::into(err))?;
 
-        let target_buffer = &mut target_buffer[offset..(offset + file_buffer.len())];
-        target_buffer.copy_from_slice(file_buffer);
+        let uninitialized = program_header.get_memory_size() - program_header.get_file_size();
+        if uninitialized > 0 {
+            // zero fill uninitialized data region
+            let offset = program_header.get_virtual_address() + program_header.get_file_size();
+            target_buffer[offset..(offset + uninitialized)].fill(0u8);
+        }
     }
 
     Ok(())

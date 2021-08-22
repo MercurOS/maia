@@ -43,6 +43,29 @@ impl <'a> ElfFile<'a> {
         )
     }
 
+    pub fn copy_segment_pages(
+        &self,
+        program_header: &ProgramHeader,
+        target: &mut [u8],
+    ) -> Result<(), ElfError> {
+        let start = program_header.get_file_base();
+        let size = program_header.get_page_count() * 4096;
+
+        if target.len() < size {
+            return Err(ElfError::BufferOverflow);
+        }
+
+        if start + size <= self.raw_buffer.len() {
+            target.copy_from_slice(&self.raw_buffer[start..(start + size)]);
+        } else {
+            let (target, padding) = target.split_at_mut(self.raw_buffer.len() - start);
+            target.copy_from_slice(&self.raw_buffer[start..self.raw_buffer.len()]);
+            padding.fill(0u8);
+        }
+
+        Ok(())
+    }
+
     pub fn segment_data(
         &self,
         program_header: &ProgramHeader,
